@@ -1,6 +1,11 @@
 from celery import Celery
 
 from app.core.config import settings
+from app.core.logging import configure_logging
+from app.core.sentry import configure_sentry
+
+configure_logging()
+configure_sentry()
 
 celery_app = Celery(
     "sentinel",
