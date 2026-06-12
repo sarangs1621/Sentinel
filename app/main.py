@@ -1,6 +1,9 @@
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from redis.exceptions import RedisError
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.v1.router import api_router
 from app.core.config import settings
@@ -13,7 +16,9 @@ from app.core.exceptions import (
     ValidationError,
 )
 from app.core.rate_limit import RateLimitMiddleware
+from app.core.redis import get_redis_client
 from app.core.security_headers import SecurityHeadersMiddleware
+from app.db.session import AsyncSessionLocal
 
 
 def register_exception_handlers(app: FastAPI) -> None:
@@ -70,6 +75,25 @@ def create_app() -> FastAPI:
     @app.get("/health", tags=["health"])
     async def health_check() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/health/ready", tags=["health"])
+    async def readiness_check() -> JSONResponse:
+        checks = {"database": "ok", "redis": "ok"}
+
+        try:
+            async with AsyncSessionLocal() as session:
+                await session.execute(text("SELECT 1"))
+        except SQLAlchemyError:
+            checks["database"] = "error"
+
+        try:
+            await get_redis_client().ping()
+        except RedisError:
+            checks["redis"] = "error"
+
+        is_ready = all(value == "ok" for value in checks.values())
+        status_code = status.HTTP_200_OK if is_ready else status.HTTP_503_SERVICE_UNAVAILABLE
+        return JSONResponse(status_code=status_code, content={"status": "ok" if is_ready else "error", **checks})
 
     return app
 

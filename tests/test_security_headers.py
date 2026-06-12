@@ -1,5 +1,7 @@
 import pytest
 from httpx import ASGITransport, AsyncClient
+from redis.exceptions import RedisError
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import settings
 from app.main import app
@@ -39,6 +41,51 @@ async def test_hsts_present_only_over_https() -> None:
     assert https_response.headers["Strict-Transport-Security"] == (
         f"max-age={settings.HSTS_MAX_AGE_SECONDS}; includeSubDomains"
     )
+
+
+async def test_readiness_check_reports_ok_when_dependencies_healthy(client: AsyncClient) -> None:
+    response = await client.get("/health/ready")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok", "database": "ok", "redis": "ok"}
+
+
+async def test_readiness_check_returns_503_when_database_unreachable(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class _BrokenSessionFactory:
+        def __call__(self) -> "_BrokenSessionFactory":
+            return self
+
+        async def __aenter__(self) -> "_BrokenSessionFactory":
+            raise SQLAlchemyError("connection refused")
+
+        async def __aexit__(self, *exc_info: object) -> bool:
+            return False
+
+    monkeypatch.setattr("app.main.AsyncSessionLocal", _BrokenSessionFactory())
+
+    response = await client.get("/health/ready")
+
+    assert response.status_code == 503
+    body = response.json()
+    assert body == {"status": "error", "database": "error", "redis": "ok"}
+
+
+async def test_readiness_check_returns_503_when_redis_unreachable(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class _BrokenRedisClient:
+        async def ping(self) -> bool:
+            raise RedisError("connection refused")
+
+    monkeypatch.setattr("app.main.get_redis_client", lambda: _BrokenRedisClient())
+
+    response = await client.get("/health/ready")
+
+    assert response.status_code == 503
+    body = response.json()
+    assert body == {"status": "error", "database": "ok", "redis": "error"}
 
 
 async def test_oversized_request_body_returns_413(client: AsyncClient) -> None:
