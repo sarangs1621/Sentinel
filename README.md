@@ -103,6 +103,61 @@ inside `greenlet_spawn` and Celery workers spin up per-task event loops in
 separate threads — without it, lines that run on every request can be
 misreported as uncovered.
 
+## CI/CD
+
+Every push and pull request to `main` runs `.github/workflows/ci.yml`, with
+five independent jobs:
+
+| Job | What it checks |
+|---|---|
+| `Lint (ruff)` | `ruff check .` |
+| `Type check (mypy)` | `mypy app` |
+| `Test & coverage` | `pytest` against a Postgres 16 service container, gated at 95% coverage (see [Coverage](#coverage)) |
+| `Docker build validation` | `docker build` of the production image + `docker compose config` validation |
+| `Security checks` | `pip-audit` dependency vulnerability scan + `detect-secrets` scan against `.secrets.baseline` |
+
+The `Test & coverage` job uploads the JUnit test report (`test-results`) and
+HTML coverage report (`coverage-report`) as workflow artifacts; the
+`Docker build validation` job uploads its build log (`docker-build-log`).
+
+### Branch protection
+
+To require these checks (and a review) before merging into `main`, add a
+branch protection rule on the GitHub repo:
+
+1. Repo **Settings → Branches → Add branch protection rule**.
+2. Branch name pattern: `main`.
+3. Enable **Require a pull request before merging** and **Require approvals**
+   (at least 1).
+4. Enable **Require status checks to pass before merging**, then select
+   `Lint (ruff)`, `Type check (mypy)`, `Test & coverage`,
+   `Docker build validation`, and `Security checks`.
+5. Enable **Require branches to be up to date before merging**.
+
+### Updating the secrets baseline
+
+If `detect-secrets` flags a new finding that is a false positive (e.g. a test
+fixture credential), regenerate the baseline locally and commit it:
+
+```bash
+detect-secrets scan > .secrets.baseline
+```
+
+### Known issue: pre-existing dependency vulnerabilities
+
+`pip-audit` currently reports 4 known vulnerabilities, so the `Security
+checks` job fails on `main` until these are addressed in a dedicated pass:
+
+- `pytest==8.3.4` — fix is `9.0.3` (major version bump; needs a compatibility
+  pass with `pytest-asyncio`/`pytest-cov`/`respx` before upgrading).
+- `starlette==0.41.3` (transitive, via `fastapi==0.115.6`) — 3 CVEs, fixes
+  require `starlette>=0.47`/`1.0.1`, which likely means a `fastapi` major
+  bump and a full regression pass of the custom middleware stack
+  (`app/core/security_headers.py`, `app/core/rate_limit.py`, CORS config).
+
+Tracked as a follow-up; not addressed as part of the CI/CD setup to avoid
+bundling a risky framework upgrade with the pipeline rollout.
+
 ## API overview (Phase 1)
 
 | Method & Path | Auth | Description |
