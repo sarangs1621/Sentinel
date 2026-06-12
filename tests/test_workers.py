@@ -49,7 +49,10 @@ async def test_check_http_connection_error(respx_mock) -> None:
 
 
 async def test_check_tcp_success() -> None:
-    server = await asyncio.start_server(lambda r, w: None, "127.0.0.1", 0)
+    async def _handle(_reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        writer.close()
+
+    server = await asyncio.start_server(_handle, "127.0.0.1", 0)
     port = server.sockets[0].getsockname()[1]
     try:
         outcome = await perform_health_check(MonitorType.TCP, f"127.0.0.1:{port}")
