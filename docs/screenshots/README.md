@@ -25,5 +25,7 @@ and render directly on GitHub:
 
 If you want PNG/SVG exports of these for a slide deck, render them with the
 [Mermaid CLI](https://github.com/mermaid-js/mermaid-cli) (`mmdc -i
-ARCHITECTURE.md -o architecture.png`) or paste the diagram source into the
+../ARCHITECTURE.md -o architecture.png`, and likewise `mmdc -i
+../ER_DIAGRAM.md -o er-diagram.png`, when run from `docs/screenshots/`) or
+paste the diagram source into the
 [Mermaid Live Editor](https://mermaid.live) and export.

@@ -61,7 +61,7 @@ trail.
 
 ## Architecture Overview
 
-```
+```text
 Client ──HTTPS──> FastAPI ──SQLAlchemy (async)──> PostgreSQL
                      │
                      ├──cache / rate-limit / denylist──> Redis
@@ -139,6 +139,7 @@ This starts `db` (Postgres), `redis`, `api`, `worker`, and `beat`. The
 ```bash
 python -m venv .venv
 . .venv/Scripts/activate   # Windows
+source .venv/bin/activate  # macOS/Linux
 pip install -r requirements-dev.txt
 alembic upgrade head
 uvicorn app.main:app --reload

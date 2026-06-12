@@ -181,7 +181,7 @@ erDiagram
   created_by_user_id`, `api_keys.created_by_user_id`,
   `audit_logs.user_id`) — deleting a user doesn't cascade-delete the
   resources they created or the audit trail of their actions; `user_id`
-  becomes `NULL`, and `audit_logs.user_id = NULL` is also used deliberately
+  becomes `NULL`, and `audit_logs.user_id IS NULL` is also used deliberately
   for **system-generated** events (auto incident open/resolve, notification
   delivery worker).
 - **`refresh_tokens.id` doubles as the JWT `jti` claim** — revocation is a

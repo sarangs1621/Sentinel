@@ -1,7 +1,7 @@
 # API Reference
 
 Base path: `{API_V1_PREFIX}` (default `/api/v1`). Interactive docs at
-`/docs` (Swagger UI) and `/api/v1/openapi.json` (OpenAPI schema).
+`/docs` (Swagger UI) and `{API_V1_PREFIX}/openapi.json` (OpenAPI schema).
 
 **Auth column legend:**
 - `–` — no authentication required

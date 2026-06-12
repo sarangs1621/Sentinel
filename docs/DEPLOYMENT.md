@@ -121,7 +121,10 @@ celery -A app.core.celery_app beat --loglevel=info
 For local development/CI without Redis, set `CELERY_TASK_ALWAYS_EAGER=true`
 — `.delay()`/`.apply_async()` calls execute the task function synchronously
 in the calling process, so the same code path is exercised by tests without
-a broker.
+a broker. Note that eager mode does **not** exercise broker/worker behavior
+such as message serialization, broker-side scheduling, network delivery, or
+broker-mediated retries/acks — validate those with a real broker/worker setup
+or integration tests.
 
 ## Health Checks
 

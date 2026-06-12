@@ -150,7 +150,7 @@ exceptions and stay framework-agnostic and unit-testable.
 
 ## 4. Code layout
 
-```
+```text
 app/
 ├── api/v1/endpoints/   # FastAPI routers — request/response only
 ├── api/deps.py         # auth, RBAC, audit-context dependencies
