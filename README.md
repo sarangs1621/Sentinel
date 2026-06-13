@@ -69,6 +69,23 @@ Stop it:
 & "C:\Program Files\PostgreSQL\17\bin\pg_ctl.exe" -D "C:\Users\saran\pgdata\sentinel" stop
 ```
 
+## Configuration
+
+In addition to the database/Redis/JWT settings in `.env.example`, the
+following are configurable (see `app/core/config.py` for defaults):
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `LOG_LEVEL` | `INFO` | Root logger level (`DEBUG`/`INFO`/`WARNING`/`ERROR`/`CRITICAL`). |
+| `LOG_FORMAT` | `text` | `text` for human-readable console logs, `json` for single-line structured logs suited to log aggregators. |
+| `SENTRY_DSN` | unset | Enables Sentry error tracking (FastAPI + Celery) when set. No-op when unset. |
+| `SENTRY_TRACES_SAMPLE_RATE` | `0.0` | Fraction of requests/tasks to trace when Sentry is enabled. |
+| `DB_POOL_SIZE` | `5` | SQLAlchemy async engine connection pool size. |
+| `DB_MAX_OVERFLOW` | `10` | Extra connections allowed beyond `DB_POOL_SIZE` under load. |
+| `DB_POOL_TIMEOUT` | `30` | Seconds to wait for a pooled connection before raising. |
+| `DB_POOL_RECYCLE_SECONDS` | `1800` | Recycle connections older than this, to avoid stale connections on managed Postgres. |
+| `DB_POOL_PRE_PING` | `true` | Test connections with a lightweight ping before use. |
+
 ## Database migrations
 
 ```bash
@@ -142,21 +159,6 @@ fixture credential), regenerate the baseline locally and commit it:
 ```bash
 detect-secrets scan > .secrets.baseline
 ```
-
-### Known issue: pre-existing dependency vulnerabilities
-
-`pip-audit` currently reports 4 known vulnerabilities, so the `Security
-checks` job fails on `main` until these are addressed in a dedicated pass:
-
-- `pytest==8.3.4` — fix is `9.0.3` (major version bump; needs a compatibility
-  pass with `pytest-asyncio`/`pytest-cov`/`respx` before upgrading).
-- `starlette==0.41.3` (transitive, via `fastapi==0.115.6`) — 3 CVEs, fixes
-  require `starlette>=0.47`/`1.0.1`, which likely means a `fastapi` major
-  bump and a full regression pass of the custom middleware stack
-  (`app/core/security_headers.py`, `app/core/rate_limit.py`, CORS config).
-
-Tracked as a follow-up; not addressed as part of the CI/CD setup to avoid
-bundling a risky framework upgrade with the pipeline rollout.
 
 ## API overview (Phase 1)
 

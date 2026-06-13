@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -16,6 +17,13 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Sentinel"
     API_V1_PREFIX: str = "/api/v1"
 
+    LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
+    LOG_FORMAT: Literal["text", "json"] = "text"
+
+    # Error tracking (optional). Leave unset to disable Sentry entirely.
+    SENTRY_DSN: str | None = None
+    SENTRY_TRACES_SAMPLE_RATE: float = 0.0
+
     BACKEND_CORS_ORIGINS: list[str] = []
 
     SECRET_KEY: str
@@ -25,6 +33,13 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str
     TEST_DATABASE_URL: str | None = None
+
+    # SQLAlchemy async engine connection pool tuning.
+    DB_POOL_SIZE: int = 5
+    DB_MAX_OVERFLOW: int = 10
+    DB_POOL_TIMEOUT: int = 30
+    DB_POOL_RECYCLE_SECONDS: int = 1800
+    DB_POOL_PRE_PING: bool = True
 
     POSTGRES_USER: str = "sentinel"
     POSTGRES_PASSWORD: str = "sentinel"
