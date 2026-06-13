@@ -96,7 +96,7 @@ diagrams and component-by-component breakdown, and
 | Infrastructure | Docker, multi-stage Dockerfile, Docker Compose (db/redis/api/worker/beat) |
 | Testing | Pytest, pytest-asyncio, respx, 95% coverage gate |
 | CI/CD | GitHub Actions (lint, type check, test+coverage, Docker build, security scan), branch protection |
-| Frontend | Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS v4, deployed separately on Vercel |
+| Frontend | Next.js 15 (App Router), React 19, TypeScript, custom CSS design system, deployed separately on Vercel |
 
 ## Local Setup
 
@@ -164,12 +164,14 @@ pytest -v
 ## Frontend
 
 The [`frontend/`](frontend/) directory contains a Next.js (App Router) +
-TypeScript + Tailwind CSS single-page app that consumes this API —
-authentication, workspaces, monitors (CRUD + detail with charts), a
-dashboard, and incident management. It's a separate deployable, typically
+React 19 + TypeScript single-page app that consumes this API —
+authentication, workspaces (with member roles and invite codes), monitors
+(CRUD + detail with check history and metrics), a dashboard, incident
+management, alert rules, the notification delivery log, audit logs, and
+per-workspace API key management. It's a separate deployable, typically
 hosted on Vercel while the API above runs elsewhere. See
-[`docs/FRONTEND.md`](docs/FRONTEND.md) for local dev (`npm run dev`),
-environment variables, and Vercel deployment + CORS setup.
+[`docs/FRONTEND.md`](docs/FRONTEND.md) for the stack, local dev
+(`npm run dev`), environment variables, and deployment + CORS setup.
 
 ## API Documentation
 

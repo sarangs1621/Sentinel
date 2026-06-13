@@ -1,19 +1,23 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-
-import { PageSpinner } from "@/components/ui/Spinner";
-import { useAuth } from "@/lib/auth-context";
+import { useRouter } from "next/navigation";
 
 export default function Home() {
-  const { user, isLoading } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (isLoading) return;
-    router.replace(user ? "/workspaces" : "/login");
-  }, [user, isLoading, router]);
+    const token = localStorage.getItem("access_token");
+    if (token) {
+      router.replace("/workspaces");
+    } else {
+      router.replace("/login");
+    }
+  }, [router]);
 
-  return <PageSpinner />;
+  return (
+    <div className="loading-page">
+      <div className="spinner spinner-lg" />
+    </div>
+  );
 }

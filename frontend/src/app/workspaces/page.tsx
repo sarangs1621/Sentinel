@@ -1,171 +1,198 @@
 "use client";
 
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import Link from "next/link";
+import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { useForm } from "react-hook-form";
-import { z } from "zod";
-
-import { AuthGuard } from "@/components/AuthGuard";
-import { Alert } from "@/components/ui/Alert";
-import { WorkspaceRoleBadge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
-import { FieldError, Input, Label } from "@/components/ui/Input";
-import { PageSpinner } from "@/components/ui/Spinner";
-import { ApiError, workspaceApi } from "@/lib/api";
-import { useAuth } from "@/lib/auth-context";
-
-const createSchema = z.object({
-  name: z.string().min(1, "Name is required.").max(255),
-  description: z.string().max(2000).optional().or(z.literal("")),
-});
-type CreateFormValues = z.infer<typeof createSchema>;
-
-const joinSchema = z.object({
-  invite_code: z.string().min(1, "Invite code is required.").max(64),
-});
-type JoinFormValues = z.infer<typeof joinSchema>;
+import {
+  apiListWorkspaces,
+  apiCreateWorkspace,
+  apiJoinWorkspace,
+  ApiError,
+  type Workspace,
+} from "@/lib/api";
+import { formatRelative } from "@/lib/utils";
 
 export default function WorkspacesPage() {
-  return (
-    <AuthGuard>
-      <WorkspacesContent />
-    </AuthGuard>
-  );
-}
-
-function WorkspacesContent() {
-  const { user, logout } = useAuth();
   const router = useRouter();
-  const queryClient = useQueryClient();
-  const [createError, setCreateError] = useState<string | null>(null);
-  const [joinError, setJoinError] = useState<string | null>(null);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showCreate, setShowCreate] = useState(false);
+  const [showJoin, setShowJoin] = useState(false);
+  const [error, setError] = useState("");
 
-  const {
-    data: workspaces,
-    isLoading,
-    error,
-  } = useQuery({ queryKey: ["workspaces"], queryFn: workspaceApi.list });
+  // Create form
+  const [cName, setCName] = useState("");
+  const [cDesc, setCDesc] = useState("");
+  const [cSlug, setCSlug] = useState("");
+  const [cLoading, setCLoading] = useState(false);
 
-  const createForm = useForm<CreateFormValues>({ resolver: zodResolver(createSchema) });
-  const joinForm = useForm<JoinFormValues>({ resolver: zodResolver(joinSchema) });
+  // Join form
+  const [jCode, setJCode] = useState("");
+  const [jLoading, setJLoading] = useState(false);
 
-  const createMutation = useMutation({
-    mutationFn: (values: CreateFormValues) =>
-      workspaceApi.create({ name: values.name, description: values.description || undefined }),
-    onSuccess: async (workspace) => {
-      await queryClient.invalidateQueries({ queryKey: ["workspaces"] });
-      router.push(`/workspaces/${workspace.id}/dashboard`);
-    },
-    onError: (err) => setCreateError(err instanceof ApiError ? err.message : "Failed to create workspace."),
-  });
+  useEffect(() => {
+    apiListWorkspaces()
+      .then(setWorkspaces)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
 
-  const joinMutation = useMutation({
-    mutationFn: (values: JoinFormValues) => workspaceApi.join(values.invite_code),
-    onSuccess: async (workspace) => {
-      await queryClient.invalidateQueries({ queryKey: ["workspaces"] });
-      router.push(`/workspaces/${workspace.id}/dashboard`);
-    },
-    onError: (err) => setJoinError(err instanceof ApiError ? err.message : "Failed to join workspace."),
-  });
+  async function handleCreate(e: FormEvent) {
+    e.preventDefault();
+    setError("");
+    setCLoading(true);
+    try {
+      const ws = await apiCreateWorkspace({
+        name: cName,
+        description: cDesc || undefined,
+        slug: cSlug || undefined,
+      });
+      router.push(`/workspaces/${ws.id}`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : "Failed to create workspace");
+    } finally {
+      setCLoading(false);
+    }
+  }
+
+  async function handleJoin(e: FormEvent) {
+    e.preventDefault();
+    setError("");
+    setJLoading(true);
+    try {
+      const ws = await apiJoinWorkspace(jCode);
+      router.push(`/workspaces/${ws.id}`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : "Failed to join workspace");
+    } finally {
+      setJLoading(false);
+    }
+  }
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <header className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
-        <span className="text-lg font-semibold text-slate-900">Sentinel</span>
-        <div className="flex items-center gap-3">
-          <span className="hidden text-sm text-slate-500 sm:inline">{user?.email}</span>
-          <Button variant="ghost" size="sm" onClick={() => void logout()}>
-            Log out
-          </Button>
+    <>
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Workspaces</h1>
+          <p className="page-subtitle">Select a workspace to manage your monitors</p>
         </div>
-      </header>
+        <div className="flex gap-3">
+          <button className="btn btn-secondary" onClick={() => { setShowJoin(true); setShowCreate(false); }}>
+            Join workspace
+          </button>
+          <button className="btn btn-primary" onClick={() => { setShowCreate(true); setShowJoin(false); }}>
+            + Create workspace
+          </button>
+        </div>
+      </div>
 
-      <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-8 sm:px-6">
-        <h1 className="text-xl font-semibold text-slate-900">Your workspaces</h1>
-        <p className="mt-1 text-sm text-slate-500">Pick a workspace to view its monitors, incidents, and dashboard.</p>
+      {/* Create Modal */}
+      {showCreate && (
+        <div className="modal-overlay" onClick={() => setShowCreate(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Create workspace</h2>
+              <button className="btn btn-ghost btn-icon" onClick={() => setShowCreate(false)}>✕</button>
+            </div>
+            <form onSubmit={handleCreate}>
+              <div className="modal-body" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                {error && <div className="auth-error">{error}</div>}
+                <div>
+                  <label className="input-label" htmlFor="create-ws-name">Name *</label>
+                  <input id="create-ws-name" className="input-field" value={cName} onChange={(e) => setCName(e.target.value)} required placeholder="My Team" autoFocus />
+                </div>
+                <div>
+                  <label className="input-label" htmlFor="create-ws-slug">Slug (optional)</label>
+                  <input id="create-ws-slug" className="input-field" value={cSlug} onChange={(e) => setCSlug(e.target.value)} placeholder="my-team" />
+                </div>
+                <div>
+                  <label className="input-label" htmlFor="create-ws-desc">Description</label>
+                  <textarea id="create-ws-desc" className="input-field" value={cDesc} onChange={(e) => setCDesc(e.target.value)} placeholder="What is this workspace for?" rows={3} style={{ resize: "vertical" }} />
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-ghost" onClick={() => setShowCreate(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={cLoading}>
+                  {cLoading ? "Creating…" : "Create workspace"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
-        <div className="mt-6 space-y-3">
-          {isLoading && <PageSpinner />}
-          {error && <Alert tone="error">{error instanceof ApiError ? error.message : "Failed to load workspaces."}</Alert>}
-          {workspaces?.length === 0 && (
-            <Alert tone="info">You aren&apos;t a member of any workspace yet. Create one or join with an invite code below.</Alert>
-          )}
-          {workspaces?.map((workspace) => (
-            <Link key={workspace.id} href={`/workspaces/${workspace.id}/dashboard`}>
-              <Card className="transition-shadow hover:shadow-md">
-                <CardContent className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-slate-900">{workspace.name}</p>
-                    {workspace.description && <p className="text-sm text-slate-500">{workspace.description}</p>}
-                  </div>
-                  <WorkspaceRoleBadge role={workspace.role} />
-                </CardContent>
-              </Card>
-            </Link>
+      {/* Join Modal */}
+      {showJoin && (
+        <div className="modal-overlay" onClick={() => setShowJoin(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Join workspace</h2>
+              <button className="btn btn-ghost btn-icon" onClick={() => setShowJoin(false)}>✕</button>
+            </div>
+            <form onSubmit={handleJoin}>
+              <div className="modal-body" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                {error && <div className="auth-error">{error}</div>}
+                <div>
+                  <label className="input-label" htmlFor="join-code">Invite code *</label>
+                  <input id="join-code" className="input-field" value={jCode} onChange={(e) => setJCode(e.target.value)} required placeholder="Paste invite code here" autoFocus />
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-ghost" onClick={() => setShowJoin(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={jLoading}>
+                  {jLoading ? "Joining…" : "Join"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Workspace Grid */}
+      {loading ? (
+        <div className="workspace-grid">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="glass-card skeleton skeleton-card" style={{ height: 160 }} />
           ))}
         </div>
-
-        <div className="mt-8 grid gap-6 sm:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>Create a workspace</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <form
-                className="space-y-3"
-                onSubmit={createForm.handleSubmit((values) => {
-                  setCreateError(null);
-                  createMutation.mutate(values);
-                })}
-              >
-                {createError && <Alert tone="error">{createError}</Alert>}
-                <div>
-                  <Label htmlFor="create-name">Name</Label>
-                  <Input id="create-name" {...createForm.register("name")} />
-                  <FieldError>{createForm.formState.errors.name?.message}</FieldError>
-                </div>
-                <div>
-                  <Label htmlFor="create-description">Description (optional)</Label>
-                  <Input id="create-description" {...createForm.register("description")} />
-                  <FieldError>{createForm.formState.errors.description?.message}</FieldError>
-                </div>
-                <Button type="submit" isLoading={createMutation.isPending} className="w-full">
-                  Create workspace
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Join a workspace</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <form
-                className="space-y-3"
-                onSubmit={joinForm.handleSubmit((values) => {
-                  setJoinError(null);
-                  joinMutation.mutate(values);
-                })}
-              >
-                {joinError && <Alert tone="error">{joinError}</Alert>}
-                <div>
-                  <Label htmlFor="invite-code">Invite code</Label>
-                  <Input id="invite-code" {...joinForm.register("invite_code")} />
-                  <FieldError>{joinForm.formState.errors.invite_code?.message}</FieldError>
-                </div>
-                <Button type="submit" variant="secondary" isLoading={joinMutation.isPending} className="w-full">
-                  Join workspace
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
+      ) : workspaces.length === 0 ? (
+        <div className="empty-state glass-card" style={{ marginTop: 32 }}>
+          <div className="empty-state-icon">🏢</div>
+          <div className="empty-state-title">No workspaces yet</div>
+          <div className="empty-state-desc">
+            Create your first workspace to start monitoring your services, or join an existing one with an invite code.
+          </div>
+          <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
+            + Create workspace
+          </button>
         </div>
-      </main>
-    </div>
+      ) : (
+        <div className="workspace-grid stagger-children">
+          {workspaces.map((ws) => (
+            <div
+              key={ws.id}
+              className="glass-card workspace-card"
+              onClick={() => router.push(`/workspaces/${ws.id}`)}
+            >
+              <div className="workspace-card-header">
+                <div className="workspace-card-icon">
+                  {ws.name.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <div className="workspace-card-name">{ws.name}</div>
+                  <div className="workspace-card-slug">/{ws.slug}</div>
+                </div>
+              </div>
+              {ws.description && (
+                <div className="workspace-card-desc">{ws.description}</div>
+              )}
+              <div className="workspace-card-meta">
+                <span className={`badge badge-neutral`}>{ws.role}</span>
+                <span>Created {formatRelative(ws.created_at)}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
   );
 }

@@ -1,6 +1,6 @@
 # Sentinel Frontend
 
-Next.js (App Router) + TypeScript + Tailwind CSS frontend for the
+Next.js (App Router) + React 19 + TypeScript frontend for the
 [Sentinel](../README.md) monitoring and incident management platform.
 
 ```bash
@@ -10,4 +10,4 @@ npm run dev
 ```
 
 See [`../docs/FRONTEND.md`](../docs/FRONTEND.md) for the stack, structure,
-auth model, environment variables, and Vercel deployment instructions.
+auth model, environment variables, and deployment instructions.
