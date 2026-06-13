@@ -19,6 +19,7 @@ trail.
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | System diagram, background-job pipeline (Monitoring → Incident → Notification → Analytics), middleware stack, code layout |
 | [`docs/ER_DIAGRAM.md`](docs/ER_DIAGRAM.md) | Full database schema as a Mermaid ER diagram, with design-decision notes |
 | [`docs/API.md`](docs/API.md) | Full REST API reference, grouped by resource |
+| [`docs/FRONTEND.md`](docs/FRONTEND.md) | Next.js frontend: stack, structure, auth model, local dev, and Vercel deployment |
 | [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Environment variables, Docker setup, migrations, worker startup, health checks, troubleshooting |
 | [`docs/INTERVIEW_NOTES.md`](docs/INTERVIEW_NOTES.md) | "Why X?" design-decision write-ups (Postgres, Redis, Celery, multi-tenancy, RBAC, thresholds, caching, audit logs) |
 | [`docs/RESUME_BULLETS.md`](docs/RESUME_BULLETS.md) | Resume-ready bullet points describing this project |
@@ -95,6 +96,7 @@ diagrams and component-by-component breakdown, and
 | Infrastructure | Docker, multi-stage Dockerfile, Docker Compose (db/redis/api/worker/beat) |
 | Testing | Pytest, pytest-asyncio, respx, 95% coverage gate |
 | CI/CD | GitHub Actions (lint, type check, test+coverage, Docker build, security scan), branch protection |
+| Frontend | Next.js 15 (App Router), React 19, TypeScript, custom CSS design system, deployed separately on Vercel |
 
 ## Local Setup
 
@@ -159,6 +161,18 @@ celery -A app.core.celery_app beat --loglevel=info
 createdb sentinel_test   # or via psql/pgAdmin
 pytest -v
 ```
+
+## Frontend
+
+The [`frontend/`](frontend/) directory contains a Next.js (App Router) +
+React 19 + TypeScript single-page app that consumes this API —
+authentication, workspaces (with member roles and invite codes), monitors
+(CRUD + detail with check history and metrics), a dashboard, incident
+management, alert rules, the notification delivery log, audit logs, and
+per-workspace API key management. It's a separate deployable, typically
+hosted on Vercel while the API above runs elsewhere. See
+[`docs/FRONTEND.md`](docs/FRONTEND.md) for the stack, local dev
+(`npm run dev`), environment variables, and deployment + CORS setup.
 
 ## API Documentation
 
