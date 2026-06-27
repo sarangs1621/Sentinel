@@ -79,8 +79,9 @@ export default function AlertRulesPage() {
   };
 
   return (
-    <div className="animate-fade-in">
-      <div className="page-header">
+    <>
+      <div className="animate-fade-in">
+        <div className="page-header">
         <div>
           <h1 className="page-title">Alert Rules</h1>
           <p className="page-subtitle">Configure how you get notified about incidents</p>
@@ -89,53 +90,6 @@ export default function AlertRulesPage() {
           + New alert rule
         </button>
       </div>
-
-      {/* Create Modal */}
-      {showCreate && (
-        <div className="modal-overlay" onClick={() => setShowCreate(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Create alert rule</h2>
-              <button className="btn btn-ghost btn-icon" onClick={() => setShowCreate(false)}>✕</button>
-            </div>
-            <form onSubmit={handleCreate}>
-              <div className="modal-body" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                {error && <div className="auth-error">{error}</div>}
-                <div>
-                  <label className="input-label" htmlFor="rule-name">Name *</label>
-                  <input id="rule-name" className="input-field" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required placeholder="Slack production alerts" autoFocus />
-                </div>
-                <div>
-                  <label className="input-label" htmlFor="rule-channel">Channel type *</label>
-                  <select id="rule-channel" className="select-field" value={form.channel_type} onChange={(e) => setForm({ ...form, channel_type: e.target.value as "webhook" | "email" })}>
-                    <option value="webhook">🔗 Webhook</option>
-                    <option value="email">📧 Email</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="input-label" htmlFor="rule-target">Target *</label>
-                  <input id="rule-target" className="input-field" value={form.target} onChange={(e) => setForm({ ...form, target: e.target.value })} required placeholder={targetPlaceholder[form.channel_type]} />
-                </div>
-                <div>
-                  <label className="input-label" htmlFor="rule-severity">Minimum severity</label>
-                  <select id="rule-severity" className="select-field" value={form.min_severity ?? ""} onChange={(e) => setForm({ ...form, min_severity: e.target.value || null })}>
-                    <option value="">Any severity</option>
-                    <option value="minor">Minor</option>
-                    <option value="major">Major</option>
-                    <option value="critical">Critical</option>
-                  </select>
-                </div>
-              </div>
-              <div className="modal-footer">
-                <button type="button" className="btn btn-ghost" onClick={() => setShowCreate(false)}>Cancel</button>
-                <button type="submit" className="btn btn-primary" disabled={createLoading}>
-                  {createLoading ? "Creating…" : "Create rule"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* Rules List */}
       {loading ? (
@@ -188,6 +142,54 @@ export default function AlertRulesPage() {
           ))}
         </div>
       )}
-    </div>
+      </div>
+
+      {/* Create Modal */}
+      {showCreate && (
+        <div className="modal-overlay" onClick={() => setShowCreate(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Create alert rule</h2>
+              <button className="btn btn-ghost btn-icon" onClick={() => setShowCreate(false)}>✕</button>
+            </div>
+            <form onSubmit={handleCreate}>
+              <div className="modal-body" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                {error && <div className="auth-error">{error}</div>}
+                <div>
+                  <label className="input-label" htmlFor="rule-name">Name *</label>
+                  <input id="rule-name" className="input-field" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required placeholder="Slack production alerts" autoFocus />
+                </div>
+                <div>
+                  <label className="input-label" htmlFor="rule-channel">Channel type *</label>
+                  <select id="rule-channel" className="select-field" value={form.channel_type} onChange={(e) => setForm({ ...form, channel_type: e.target.value as "webhook" | "email" })}>
+                    <option value="webhook">🔗 Webhook</option>
+                    <option value="email">📧 Email</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="input-label" htmlFor="rule-target">Target *</label>
+                  <input id="rule-target" className="input-field" value={form.target} onChange={(e) => setForm({ ...form, target: e.target.value })} required placeholder={targetPlaceholder[form.channel_type]} />
+                </div>
+                <div>
+                  <label className="input-label" htmlFor="rule-severity">Minimum severity</label>
+                  <select id="rule-severity" className="select-field" value={form.min_severity ?? ""} onChange={(e) => setForm({ ...form, min_severity: e.target.value || null })}>
+                    <option value="">Any severity</option>
+                    <option value="minor">Minor</option>
+                    <option value="major">Major</option>
+                    <option value="critical">Critical</option>
+                  </select>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-ghost" onClick={() => setShowCreate(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={createLoading}>
+                  {createLoading ? "Creating…" : "Create rule"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
