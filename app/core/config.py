@@ -85,12 +85,16 @@ class Settings(BaseSettings):
     @field_validator("DATABASE_URL", mode="before")
     @classmethod
     def normalize_database_url(cls, value: object) -> object:
-        """Convert Render-style postgres:// URLs to SQLAlchemy asyncpg format."""
+        """Convert Render-style postgres:// URLs to SQLAlchemy asyncpg format and handle sslmode query param."""
         if isinstance(value, str):
             if value.startswith("postgres://"):
-                return value.replace("postgres://", "postgresql+asyncpg://", 1)
-            if value.startswith("postgresql://"):
-                return value.replace("postgresql://", "postgresql+asyncpg://", 1)
+                value = value.replace("postgres://", "postgresql+asyncpg://", 1)
+            elif value.startswith("postgresql://"):
+                value = value.replace("postgresql://", "postgresql+asyncpg://", 1)
+            
+            # Convert sslmode=require to ssl=require for asyncpg compatibility
+            if "sslmode=" in value:
+                value = value.replace("sslmode=", "ssl=")
         return value
 
     @model_validator(mode="after")
