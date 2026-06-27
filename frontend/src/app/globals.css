@@ -468,15 +468,10 @@ a:hover {
   z-index: 1000;
   padding: 40px 16px;
   overflow-y: auto;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   animation: fadeIn 0.2s ease;
-}
-
-.modal-overlay::before {
-  content: "";
-  display: inline-block;
-  height: 100%;
-  vertical-align: middle;
 }
 
 .modal-content {
@@ -485,11 +480,12 @@ a:hover {
   border-radius: var(--radius-lg);
   width: 100%;
   max-width: 520px;
-  display: inline-block;
-  vertical-align: middle;
   text-align: left;
   box-shadow: var(--shadow-lg);
   animation: scaleIn 0.2s ease;
+  max-height: calc(100vh - 80px);
+  display: flex;
+  flex-direction: column;
 }
 
 .modal-header {
@@ -507,6 +503,7 @@ a:hover {
 
 .modal-body {
   padding: 24px;
+  overflow-y: auto;
 }
 
 .modal-footer {
