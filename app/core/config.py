@@ -82,6 +82,17 @@ class Settings(BaseSettings):
             return [origin.strip() for origin in value.split(",") if origin.strip()]
         return value
 
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def normalize_database_url(cls, value: object) -> object:
+        """Convert Render-style postgres:// URLs to SQLAlchemy asyncpg format."""
+        if isinstance(value, str):
+            if value.startswith("postgres://"):
+                return value.replace("postgres://", "postgresql+asyncpg://", 1)
+            if value.startswith("postgresql://"):
+                return value.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return value
+
     @model_validator(mode="after")
     def _validate_secret_key(self) -> "Settings":
         if self.ENVIRONMENT != "testing" and len(self.SECRET_KEY) < 32:
