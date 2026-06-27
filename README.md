@@ -342,16 +342,12 @@ Copy `.env.example` to `.env` and adjust values. All variables are documented be
 | `SENTRY_DSN` | *(unset)* | Sentry DSN — leave unset to disable |
 | `SENTRY_TRACES_SAMPLE_RATE` | `0.0` | Fraction of requests to trace |
 
-### SMTP (Email Notifications)
+### Email Notifications (Resend API)
 
 | Variable | Default | Description |
 |---|---|---|
-| `SMTP_HOST` | `localhost` | SMTP server hostname |
-| `SMTP_PORT` | `587` | SMTP server port |
-| `SMTP_USERNAME` | — | SMTP auth username |
-| `SMTP_PASSWORD` | — | SMTP auth password |
-| `SMTP_USE_TLS` | `true` | Use TLS for SMTP |
-| `SMTP_FROM_ADDRESS` | `alerts@sentinel.local` | Email "From" address |
+| `RESEND_API_KEY` | *(unset)* | Your Resend API Key |
+| `EMAIL_FROM_ADDRESS` | `onboarding@resend.dev` | Email "From" address |
 
 ### Frontend
 
@@ -450,7 +446,7 @@ All endpoints are prefixed with `/api/v1`. Interactive docs available at `/docs`
 | GET | `/workspaces/{id}/notifications` | member | List notifications |
 | GET | `/workspaces/{id}/notifications/{notification_id}` | member | Notification detail |
 
-**Channel types:** `webhook` (JSON POST) and `email` (plaintext via SMTP)  
+**Channel types:** `webhook` (JSON POST) and `email` (via Resend REST API)  
 **Severity filter:** `min_severity` can be `minor`, `major`, or `critical`  
 **Retry logic:** Up to 5 delivery attempts per notification
 
