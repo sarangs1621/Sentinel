@@ -1,3 +1,8 @@
+import asyncio
+import logging
+import time
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -56,10 +61,73 @@ def register_exception_handlers(app: FastAPI) -> None:
         return JSONResponse(status_code=status.HTTP_423_LOCKED, content={"detail": str(exc)})
 
 
+logger = logging.getLogger(__name__)
+
+async def local_scheduler_loop() -> None:
+    from app.core.config import settings
+    from app.workers.tasks import (
+        _get_due_monitor_ids,
+        _perform_check,
+        _get_due_notification_ids,
+        _deliver_notification,
+        _get_aggregation_monitor_ids,
+        _aggregate_monitor_metrics,
+        _yesterday_utc_midnight
+    )
+    
+    logger.info("Scheduler started. Running in-process background task.")
+    
+    last_check = 0.0
+    last_metrics = 0.0
+
+    check_interval = settings.CHECK_DISPATCH_INTERVAL_SECONDS
+    metrics_interval = settings.METRICS_AGGREGATION_INTERVAL_SECONDS
+
+    while True:
+        try:
+            now = time.time()
+            
+            if now - last_check >= check_interval:
+                monitor_ids = await _get_due_monitor_ids()
+                for m_id in monitor_ids:
+                    asyncio.create_task(_perform_check(m_id))
+                    
+                notification_ids = await _get_due_notification_ids()
+                for n_id in notification_ids:
+                    asyncio.create_task(_deliver_notification(n_id))
+                    
+                last_check = now
+                
+            if now - last_metrics >= metrics_interval:
+                monitor_ids = await _get_aggregation_monitor_ids()
+                period_start = _yesterday_utc_midnight()
+                for m_id in monitor_ids:
+                    asyncio.create_task(_aggregate_monitor_metrics(m_id, period_start))
+                    
+                last_metrics = now
+
+        except Exception as e:
+            logger.error(f"Error in scheduler loop: {e}", exc_info=True)
+            
+        await asyncio.sleep(1)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    scheduler_task = asyncio.create_task(local_scheduler_loop())
+    yield
+    scheduler_task.cancel()
+    try:
+        await scheduler_task
+    except asyncio.CancelledError:
+        pass
+
+
 def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.PROJECT_NAME,
         openapi_url=f"{settings.API_V1_PREFIX}/openapi.json",
+        lifespan=lifespan,
     )
 
     if settings.BACKEND_CORS_ORIGINS:

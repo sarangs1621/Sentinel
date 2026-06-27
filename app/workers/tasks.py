@@ -58,11 +58,20 @@ async def _perform_check(monitor_id: uuid.UUID, session: AsyncSession | None = N
 
 
 async def _run_check(session: AsyncSession, monitor_id: uuid.UUID, cache: CacheService | None = None) -> None:
+    import logging
+    logger = logging.getLogger(__name__)
+
     monitor = await MonitorRepository(session).get_by_id(monitor_id)
     if monitor is None or monitor.deleted_at is not None or not monitor.is_active:
         return
 
+    logger.info(f"Monitor picked for execution: {monitor.name} ({monitor.id})")
+    logger.info(f"Health check started for {monitor.name} to {monitor.target}")
+
     outcome = await perform_health_check(monitor.monitor_type, monitor.target)
+    
+    logger.info(f"Health check completed for {monitor.name}: status={outcome.status}, latency={outcome.response_time_ms}ms")
+
     await CheckService(session, cache).record_check(
         monitor.workspace_id,
         monitor.id,
@@ -72,6 +81,9 @@ async def _run_check(session: AsyncSession, monitor_id: uuid.UUID, cache: CacheS
             error_message=outcome.error_message,
         ),
     )
+
+    logger.info(f"Monitor status updated for {monitor.name} to {outcome.status}")
+    logger.info(f"Next check scheduled for {monitor.name} in {monitor.check_interval_seconds} seconds")
 
 
 @celery_app.task(name="app.workers.tasks.dispatch_pending_notifications")
