@@ -130,10 +130,19 @@ async def _run_delivery(session: AsyncSession, notification_id: uuid.UUID) -> No
     if incident is None or rule is None or not rule.is_enabled:
         return
 
+    logger.info("Delivering notification ID %s", notification_id)
+
     if rule.channel_type == NotificationChannel.EMAIL:
+        logger.info("Calling email provider for target %s", rule.target)
         result = await deliver_email(rule.target, incident, notification.event_type)
     else:
+        logger.info("Calling webhook provider for target %s", rule.target)
         result = await deliver_webhook(rule.target, incident, notification.event_type)
+
+    if result.success:
+        logger.info("%s sent successfully to %s", rule.channel_type.value.capitalize(), rule.target)
+    else:
+        logger.error("%s delivery failed for %s: %s", rule.channel_type.value.capitalize(), rule.target, result.error_message)
 
     notification.attempts += 1
     notification.last_attempted_at = datetime.now(UTC)

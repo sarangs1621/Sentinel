@@ -93,6 +93,8 @@ async def local_scheduler_loop() -> None:
                     asyncio.create_task(_perform_check(m_id))
                     
                 notification_ids = await _get_due_notification_ids()
+                if notification_ids:
+                    logger.info("Scheduler found %d pending notifications", len(notification_ids))
                 for n_id in notification_ids:
                     asyncio.create_task(_deliver_notification(n_id))
                     

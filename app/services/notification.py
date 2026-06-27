@@ -1,4 +1,7 @@
+import logging
 import uuid
+
+logger = logging.getLogger(__name__)
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -40,7 +43,9 @@ class NotificationService:
     async def evaluate_incident_event(self, incident: Incident, event: NotificationEvent) -> None:
         """Queue a notification for `incident` for every enabled alert rule in
         the workspace whose `min_severity` (if any) the incident meets."""
+        logger.info("evaluate_incident_event called for incident %s with event %s", incident.id, event)
         rules = await self.alert_rules.list_enabled_by_workspace(incident.workspace_id)
+        logger.info("Found %d matching alert rules", len(rules))
 
         for rule in rules:
             if (
@@ -57,5 +62,6 @@ class NotificationService:
                 status=NotificationStatus.PENDING,
             )
             self.notifications.add(notification)
+            logger.info("Notification record created with rule ID %s", rule.id)
 
         await self.session.flush()
