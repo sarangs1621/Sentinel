@@ -1,0 +1,99 @@
+services:
+  - type: web
+    name: sentinel-api
+    runtime: python
+    buildCommand: pip install -r requirements.txt && alembic upgrade head
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: LOG_FORMAT
+        value: json
+      - key: LOG_LEVEL
+        value: INFO
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: sentinel-db
+          property: connectionURI
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: sentinel-redis
+          property: connectionURI
+      - key: CELERY_TASK_ALWAYS_EAGER
+        value: "false"
+      - key: BACKEND_CORS_ORIGINS
+        value: '["https://sentinel-dashboard.vercel.app"]'
+      - key: PYTHON_VERSION
+        value: "3.12.0"
+    healthCheckPath: /health
+
+  - type: worker
+    name: sentinel-worker
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: celery -A app.core.celery_app worker --loglevel=info --concurrency=2
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: LOG_FORMAT
+        value: json
+      - key: SECRET_KEY
+        fromService:
+          type: web
+          name: sentinel-api
+          envVarKey: SECRET_KEY
+      - key: DATABASE_URL
+        fromDatabase:
+          name: sentinel-db
+          property: connectionURI
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: sentinel-redis
+          property: connectionURI
+      - key: CELERY_TASK_ALWAYS_EAGER
+        value: "false"
+      - key: PYTHON_VERSION
+        value: "3.12.0"
+
+  - type: worker
+    name: sentinel-beat
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: celery -A app.core.celery_app beat --loglevel=info
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: LOG_FORMAT
+        value: json
+      - key: SECRET_KEY
+        fromService:
+          type: web
+          name: sentinel-api
+          envVarKey: SECRET_KEY
+      - key: DATABASE_URL
+        fromDatabase:
+          name: sentinel-db
+          property: connectionURI
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: sentinel-redis
+          property: connectionURI
+      - key: CELERY_TASK_ALWAYS_EAGER
+        value: "false"
+      - key: PYTHON_VERSION
+        value: "3.12.0"
+
+databases:
+  - name: sentinel-db
+    plan: free
+    databaseName: sentinel
+    user: sentinel
+
+  # Note: Render free Redis is available in some regions.
+  # If not available, set CELERY_TASK_ALWAYS_EAGER=true on the web service
+  # and remove the worker/beat services.
