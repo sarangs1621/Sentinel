@@ -1,201 +1,686 @@
 # Sentinel
 
-[![CI](https://github.com/sarangs1621/Sentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/sarangs1621/Sentinel/actions/workflows/ci.yml)
+**Open-source uptime monitoring & incident management platform.**
 
-Sentinel is a production-grade observability and incident management
-platform built using **FastAPI**, **PostgreSQL**, **Redis**, and **Celery**.
+Built with FastAPI, Next.js 15, PostgreSQL, Redis, and Celery — Sentinel provides real-time health checks, automated incident detection, alerting, analytics dashboards, and a full audit trail.
 
-It lets a team register HTTP/TCP/PING monitors for the services they care
-about, automatically probes them on a schedule, opens and resolves
-incidents based on a configurable failure threshold, fans alerts out to
-webhook/email channels, and reports latency/uptime SLAs — all scoped to
-per-workspace tenants with role-based access control and a full audit
-trail.
+---
 
-## Documentation
+## Table of Contents
 
-| Doc | Contents |
-|---|---|
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | System diagram, background-job pipeline (Monitoring → Incident → Notification → Analytics), middleware stack, code layout |
-| [`docs/ER_DIAGRAM.md`](docs/ER_DIAGRAM.md) | Full database schema as a Mermaid ER diagram, with design-decision notes |
-| [`docs/API.md`](docs/API.md) | Full REST API reference, grouped by resource |
-| [`docs/FRONTEND.md`](docs/FRONTEND.md) | Next.js frontend: stack, structure, auth model, local dev, and Vercel deployment |
-| [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Environment variables, Docker setup, migrations, worker startup, health checks, troubleshooting |
-| [`docs/INTERVIEW_NOTES.md`](docs/INTERVIEW_NOTES.md) | "Why X?" design-decision write-ups (Postgres, Redis, Celery, multi-tenancy, RBAC, thresholds, caching, audit logs) |
-| [`docs/RESUME_BULLETS.md`](docs/RESUME_BULLETS.md) | Resume-ready bullet points describing this project |
+- [Features](#features)
+- [Tech Stack](#tech-stack)
+- [Architecture](#architecture)
+- [Project Structure](#project-structure)
+- [Getting Started](#getting-started)
+  - [Prerequisites](#prerequisites)
+  - [Backend Setup](#backend-setup)
+  - [Frontend Setup](#frontend-setup)
+  - [Docker Compose (Full Stack)](#docker-compose-full-stack)
+  - [Local Postgres on Windows (No Docker)](#local-postgres-on-windows-no-docker)
+- [Environment Variables](#environment-variables)
+- [Database Migrations](#database-migrations)
+- [API Reference](#api-reference)
+  - [Authentication](#authentication)
+  - [Workspaces & Members](#workspaces--members)
+  - [Monitors](#monitors)
+  - [Health Checks & Incidents](#health-checks--incidents)
+  - [Alert Rules & Notifications](#alert-rules--notifications)
+  - [Analytics & Metrics](#analytics--metrics)
+  - [Audit Logs](#audit-logs)
+  - [System Health](#system-health)
+- [Frontend Pages](#frontend-pages)
+- [Scheduler & Background Workers](#scheduler--background-workers)
+- [Testing](#testing)
+- [CI/CD](#cicd)
+- [Deployment](#deployment)
+- [Git Workflow & Branch Naming](#git-workflow--branch-naming)
+- [Documentation](#documentation)
+
+---
 
 ## Features
 
-- **Authentication** — JWT access/refresh tokens with refresh-token
-  rotation and revocation, Redis-backed access-token denylist (logout),
-  account lockout after repeated failed logins, and per-workspace API keys
-  for service-to-service access.
-- **RBAC** — every workspace member has a role (`owner` / `admin` /
-  `member`); endpoints enforce role checks via FastAPI dependencies.
-- **Workspace Management** — multi-tenant workspaces with invite-code
-  joining, member role management, and self-leave.
-- **Monitor Management** — CRUD for HTTP/TCP/PING monitors with per-type
-  target validation, duplicate detection, and soft delete.
-- **Monitoring Engine** — Celery-beat-driven scheduler dispatches due
-  checks; a worker probes each target (HTTP GET, TCP connect, OS ping) and
-  records the result.
-- **Incident Management** — a configurable `failure_threshold` per monitor
-  drives automatic incident open/resolve, plus manual
-  acknowledge/resolve by admins/owners.
-- **Alerting** — per-workspace alert rules (webhook or email,
-  severity-filtered) with async, retrying notification delivery.
-- **Analytics** — on-demand latency percentiles (p50/p95/p99) and
-  check-based + time-based uptime/SLA reporting, plus a daily aggregation
-  job that persists historical `MetricSnapshot`s.
-- **Audit Logs** — immutable, searchable log of every mutation with
-  before/after diffs, IP address, and user agent; sensitive fields are
-  redacted automatically.
-- **Caching** — Redis-backed read-through cache for hot endpoints with a
-  fail-open degradation path if Redis is unavailable.
-- **Rate Limiting** — fixed-window limiter (per-user or per-IP), with
-  stricter limits on auth endpoints, plus security-headers middleware
-  (CSP, HSTS, X-Frame-Options, request-size limits).
-- **CI/CD** — GitHub Actions pipeline with lint (ruff), type checking
-  (mypy), tests + coverage gate (pytest, 95% minimum), Docker build
-  validation, and security scanning (pip-audit, detect-secrets), with
-  branch protection on `main`.
+- **Multi-protocol monitoring** — HTTP, TCP, and PING health checks with configurable intervals
+- **Automated incident lifecycle** — Configurable failure thresholds trigger incidents; auto-recovery resolves them
+- **Workspace-based multi-tenancy** — Isolated workspaces with invite codes and RBAC (owner/admin/member)
+- **Alerting engine** — Webhook and email alert rules with severity filtering and retry logic
+- **Analytics & SLA reporting** — Latency percentiles (p50/p95/p99), uptime %, daily metric snapshots
+- **Audit logging** — Immutable, searchable logs with before/after diffs and request metadata (IP, user agent)
+- **Dashboard** — Real-time workspace overview with monitor/incident status counts
+- **Security hardened** — Rate limiting, CORS, security headers (HSTS, CSP, etc.), account lockout, secret key validation
 
-## Architecture Overview
-
-```
-Client ──HTTPS──> FastAPI ──SQLAlchemy (async)──> PostgreSQL
-                     │
-                     ├──cache / rate-limit / denylist──> Redis
-                     │
-                     └──enqueue──> Redis ──> Celery Beat + Workers
-                                                  │
-                                   Monitoring Engine (HTTP/TCP/PING checks)
-                                                  │
-                                          Incident Engine
-                                    (failure threshold, open/resolve)
-                                                  │
-                                        Notification Engine
-                                       (webhook / email delivery)
-
-                              Analytics Engine ──> daily MetricSnapshots
-                              Audit Engine ──> immutable AuditLog rows
-```
-
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full Mermaid
-diagrams and component-by-component breakdown, and
-[`docs/ER_DIAGRAM.md`](docs/ER_DIAGRAM.md) for the database schema.
+---
 
 ## Tech Stack
 
-| Layer | Technology |
+### Backend
+| Technology | Purpose |
 |---|---|
-| Backend | Python 3.12, FastAPI, Pydantic v2, Repository + Service layer architecture |
-| Database | PostgreSQL 16, SQLAlchemy 2.0 (async), Alembic migrations |
-| Caching | Redis 7 (application cache, rate limiting, JWT denylist) |
-| Workers | Celery (beat + worker), Redis broker/result backend |
-| Infrastructure | Docker, multi-stage Dockerfile, Docker Compose (db/redis/api/worker/beat) |
-| Testing | Pytest, pytest-asyncio, respx, 95% coverage gate |
-| CI/CD | GitHub Actions (lint, type check, test+coverage, Docker build, security scan), branch protection |
-| Frontend | Next.js 15 (App Router), React 19, TypeScript, custom CSS design system, deployed separately on Vercel |
+| **FastAPI** | Async REST API framework |
+| **SQLAlchemy 2.0** (async) | ORM with asyncpg driver |
+| **PostgreSQL** | Primary datastore |
+| **Alembic** | Database migrations |
+| **Celery + Redis** | Distributed task queue for health checks & notifications |
+| **Pydantic v2** | Request/response validation and settings management |
+| **Sentry** | Error tracking & performance monitoring (optional) |
 
-## Local Setup
+### Frontend
+| Technology | Purpose |
+|---|---|
+| **Next.js 15** | React framework with App Router |
+| **React 19** | UI library |
+| **TypeScript** | Type-safe frontend code |
 
-### Requirements
+### DevOps
+| Technology | Purpose |
+|---|---|
+| **Docker** | Multi-stage production image |
+| **Docker Compose** | Local full-stack orchestration |
+| **GitHub Actions** | CI pipeline (lint, type check, test, security scan) |
+| **Render** | Backend deployment (API + worker + beat) |
+| **Vercel** | Frontend deployment |
 
-- Docker + Docker Compose (recommended), **or** Python 3.12 + a local
-  PostgreSQL instance for running without Docker.
+---
 
-### Environment Variables
+## Architecture
 
-Copy the template and adjust as needed:
+Sentinel follows a **layered architecture** with clear separation of concerns:
 
-```bash
-cp .env.example .env
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Next.js Frontend                         │
+│              (React 19 + TypeScript + App Router)           │
+└──────────────────────────┬──────────────────────────────────┘
+                           │ HTTP / REST
+┌──────────────────────────▼──────────────────────────────────┐
+│                     FastAPI (API Layer)                      │
+│    Routes → Dependencies (auth, RBAC, pagination, audit)    │
+├─────────────────────────────────────────────────────────────┤
+│                    Service Layer                             │
+│   Business logic, incident lifecycle, notification fanout   │
+├─────────────────────────────────────────────────────────────┤
+│                  Repository Layer                            │
+│          SQLAlchemy async queries, CRUD operations           │
+├─────────────────────────────────────────────────────────────┤
+│                   PostgreSQL + Redis                         │
+│         (Data persistence)   (Celery broker/backend)        │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│                  Celery Workers & Beat                       │
+│  Scheduled health checks • Notification delivery • Metrics  │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-Key variables (see [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for the full
-reference):
+**Key patterns:**
+- **Repository → Service → API** — Each layer has a single responsibility
+- **Dependency injection** — FastAPI `Depends()` for auth, RBAC, pagination, audit context
+- **Async throughout** — `asyncpg` driver, `async/await` in all DB operations
+- **Soft deletes** — Monitors use `deleted_at` instead of hard deletes
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `SECRET_KEY` | — (required) | JWT signing secret (≥32 chars outside `testing`) |
-| `DATABASE_URL` | — (required) | `postgresql+asyncpg://...` connection string |
-| `REDIS_URL` | `redis://localhost:6379/0` | Celery broker/result backend + cache |
-| `CELERY_TASK_ALWAYS_EAGER` | `false` | `true` runs Celery tasks in-process (no broker needed) |
-| `BACKEND_CORS_ORIGINS` | `[]` | Explicit allow-list of CORS origins (never `*`) |
-| `CHECK_DISPATCH_INTERVAL_SECONDS` | `10` | How often Beat looks for due monitor checks |
-| `RATE_LIMIT_ENABLED` | `true` | Toggle the rate-limit middleware |
+> For detailed architecture documentation, see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
-### Docker Commands
+---
 
-```bash
-docker compose up -d
+## Project Structure
+
+```
+sentinel/
+├── app/                          # Backend application
+│   ├── api/                      # API routes (v1)
+│   │   └── v1/
+│   │       ├── endpoints/        # Route handlers (auth, workspaces, monitors, etc.)
+│   │       └── router.py         # API router aggregation
+│   ├── core/                     # Framework config & middleware
+│   │   ├── config.py             # Pydantic settings (all env vars)
+│   │   ├── celery_app.py         # Celery app & beat schedule
+│   │   ├── logging.py            # Structured logging (text/JSON)
+│   │   ├── security.py           # JWT creation & verification
+│   │   ├── security_headers.py   # HSTS, CSP, X-Frame-Options middleware
+│   │   ├── rate_limit.py         # Per-IP rate limiting middleware
+│   │   ├── sentry.py             # Sentry SDK initialization
+│   │   └── redis.py              # Redis client singleton
+│   ├── db/                       # Database session & base model
+│   ├── models/                   # SQLAlchemy ORM models
+│   ├── repositories/             # Data access layer (async queries)
+│   ├── schemas/                  # Pydantic request/response schemas
+│   ├── services/                 # Business logic layer
+│   └── workers/                  # Celery task definitions
+├── frontend/                     # Next.js frontend application
+│   ├── src/
+│   │   ├── app/                  # App Router pages & layouts
+│   │   │   ├── login/            # Login page
+│   │   │   ├── register/         # Registration page
+│   │   │   └── workspaces/       # Workspace routes
+│   │   │       └── [id]/         # Dynamic workspace pages
+│   │   │           ├── monitors/ # Monitor list & detail
+│   │   │           ├── incidents/
+│   │   │           ├── alerts/
+│   │   │           ├── notifications/
+│   │   │           ├── audit-logs/
+│   │   │           └── settings/
+│   │   ├── components/           # Reusable UI components
+│   │   └── lib/                  # API client, utilities, auth helpers
+│   ├── package.json
+│   └── next.config.ts
+├── alembic/                      # Database migration scripts
+├── tests/                        # Pytest test suite (17 test files)
+├── docs/                         # Extended documentation
+├── .github/workflows/ci.yml      # GitHub Actions CI pipeline
+├── docker-compose.yml            # Local dev orchestration
+├── Dockerfile                    # Multi-stage production image
+├── render.yaml                   # Render deployment blueprint
+├── requirements.txt              # Production Python dependencies
+├── requirements-dev.txt          # Dev/test dependencies
+├── pyproject.toml                # Ruff, mypy, coverage config
+└── .env.example                  # Environment variable template
 ```
 
-This starts `db` (Postgres), `redis`, `api`, `worker`, and `beat`. The
-`api` container runs `alembic upgrade head` automatically before starting
-`uvicorn`.
+---
 
-### Run Instructions (without Docker)
+## Getting Started
+
+### Prerequisites
+
+- **Python 3.12+**
+- **Node.js 18+** and **npm**
+- **PostgreSQL 16+**
+- **Redis** (optional for local dev — set `CELERY_TASK_ALWAYS_EAGER=true` to skip)
+
+### Backend Setup
 
 ```bash
+# 1. Clone the repository
+git clone https://github.com/sarangs1621/Sentinel.git
+cd Sentinel
+
+# 2. Create and activate a virtual environment
 python -m venv .venv
-. .venv/Scripts/activate   # Windows
+.venv\Scripts\activate      # Windows
+# source .venv/bin/activate  # macOS/Linux
+
+# 3. Install dependencies
 pip install -r requirements-dev.txt
+
+# 4. Set up environment variables
+cp .env.example .env
+# Edit .env with your database credentials, secret key, etc.
+
+# 5. Run database migrations
 alembic upgrade head
+
+# 6. Start the API server
 uvicorn app.main:app --reload
 ```
 
-Run the worker and beat scheduler in separate terminals (requires Redis,
-`CELERY_TASK_ALWAYS_EAGER=false`):
+The API will be available at **http://localhost:8000**.  
+Interactive API docs at **http://localhost:8000/docs**.
+
+### Frontend Setup
 
 ```bash
+# 1. Navigate to the frontend directory
+cd frontend
+
+# 2. Install dependencies
+npm install
+
+# 3. Set up environment variables
+cp .env.example .env.local
+# Edit .env.local — set NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+
+# 4. Start the development server
+npm run dev
+```
+
+The frontend will be available at **http://localhost:3000**.
+
+### Docker Compose (Full Stack)
+
+Spin up the entire stack (Postgres, Redis, API, Celery worker, Celery beat) with one command:
+
+```bash
+cp .env.example .env     # adjust values as needed
+docker compose up -d
+```
+
+The `api` container runs `alembic upgrade head` automatically on startup.
+
+| Service | Port | Description |
+|---|---|---|
+| `api` | 8000 | FastAPI application |
+| `db` | 5432 | PostgreSQL 16 |
+| `redis` | 6379 | Redis 7 (Celery broker) |
+| `worker` | — | Celery worker (executes health checks & notifications) |
+| `beat` | — | Celery beat (dispatches scheduled tasks) |
+
+### Local Postgres on Windows (No Docker)
+
+If you're running PostgreSQL locally without Docker (e.g., a user-owned instance on a custom port):
+
+```powershell
+# Start Postgres on port 5433
+& "C:\Program Files\PostgreSQL\17\bin\pg_ctl.exe" `
+  -D "C:\Users\saran\pgdata\sentinel" `
+  -l "C:\Users\saran\pgdata\sentinel.log" `
+  -o "-p 5433" start
+
+# Stop Postgres
+& "C:\Program Files\PostgreSQL\17\bin\pg_ctl.exe" `
+  -D "C:\Users\saran\pgdata\sentinel" stop
+```
+
+Make sure your `.env` has `DATABASE_URL` pointing to port `5433`:
+```
+DATABASE_URL=postgresql+asyncpg://sentinel:sentinel@localhost:5433/sentinel
+```
+
+---
+
+## Environment Variables
+
+Copy `.env.example` to `.env` and adjust values. All variables are documented below:
+
+### Application
+
+| Variable | Default | Description |
+|---|---|---|
+| `ENVIRONMENT` | `development` | `development`, `production`, or `testing` |
+| `PROJECT_NAME` | `Sentinel` | Application name (shown in API docs) |
+| `API_V1_PREFIX` | `/api/v1` | API route prefix |
+| `BACKEND_CORS_ORIGINS` | `[]` | JSON array of allowed CORS origins |
+
+### Security & Authentication
+
+| Variable | Default | Description |
+|---|---|---|
+| `SECRET_KEY` | *(required)* | JWT signing key — must be ≥32 characters in production. Generate with: `python -c "import secrets; print(secrets.token_urlsafe(64))"` |
+| `JWT_ALGORITHM` | `HS256` | JWT algorithm |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | `30` | Access token TTL |
+| `REFRESH_TOKEN_EXPIRE_DAYS` | `7` | Refresh token TTL |
+
+### Database
+
+| Variable | Default | Description |
+|---|---|---|
+| `DATABASE_URL` | *(required)* | PostgreSQL connection string (`postgresql+asyncpg://...`) |
+| `TEST_DATABASE_URL` | — | Separate database for tests |
+| `DB_POOL_SIZE` | `5` | SQLAlchemy connection pool size |
+| `DB_MAX_OVERFLOW` | `10` | Extra connections allowed beyond pool size |
+| `DB_POOL_TIMEOUT` | `30` | Seconds to wait for a pooled connection |
+| `DB_POOL_RECYCLE_SECONDS` | `1800` | Recycle stale connections |
+| `DB_POOL_PRE_PING` | `true` | Test connections before use |
+
+### Background Jobs
+
+| Variable | Default | Description |
+|---|---|---|
+| `REDIS_URL` | `redis://localhost:6379/0` | Redis connection for Celery |
+| `CELERY_TASK_ALWAYS_EAGER` | `false` | `true` = run tasks synchronously (no Redis needed) |
+| `CHECK_DISPATCH_INTERVAL_SECONDS` | `10` | How often to dispatch health checks |
+| `METRICS_AGGREGATION_INTERVAL_SECONDS` | `3600` | How often to run daily metric aggregation |
+
+### Rate Limiting
+
+| Variable | Default | Description |
+|---|---|---|
+| `RATE_LIMIT_ENABLED` | `true` | Enable/disable rate limiting |
+| `RATE_LIMIT_REQUESTS` | `100` | Max requests per window |
+| `RATE_LIMIT_WINDOW_SECONDS` | `60` | Rate limit window duration |
+| `AUTH_RATE_LIMIT_REQUESTS` | `5` | Max login/register attempts per window |
+| `AUTH_RATE_LIMIT_WINDOW_SECONDS` | `60` | Auth rate limit window |
+| `MAX_LOGIN_FAILURES` | `5` | Failed logins before account lockout |
+| `LOGIN_LOCKOUT_WINDOW_SECONDS` | `900` | Account lockout duration (15 min) |
+
+### Logging & Monitoring
+
+| Variable | Default | Description |
+|---|---|---|
+| `LOG_LEVEL` | `INFO` | `DEBUG` / `INFO` / `WARNING` / `ERROR` / `CRITICAL` |
+| `LOG_FORMAT` | `text` | `text` for console, `json` for structured logs |
+| `SENTRY_DSN` | *(unset)* | Sentry DSN — leave unset to disable |
+| `SENTRY_TRACES_SAMPLE_RATE` | `0.0` | Fraction of requests to trace |
+
+### SMTP (Email Notifications)
+
+| Variable | Default | Description |
+|---|---|---|
+| `SMTP_HOST` | `localhost` | SMTP server hostname |
+| `SMTP_PORT` | `587` | SMTP server port |
+| `SMTP_USERNAME` | — | SMTP auth username |
+| `SMTP_PASSWORD` | — | SMTP auth password |
+| `SMTP_USE_TLS` | `true` | Use TLS for SMTP |
+| `SMTP_FROM_ADDRESS` | `alerts@sentinel.local` | Email "From" address |
+
+### Frontend
+
+| Variable | Default | Description |
+|---|---|---|
+| `NEXT_PUBLIC_API_URL` | — | Backend API URL (e.g., `http://localhost:8000/api/v1`) |
+
+---
+
+## Database Migrations
+
+```bash
+# Create a new migration
+alembic revision --autogenerate -m "description of changes"
+
+# Apply all pending migrations
+alembic upgrade head
+
+# Downgrade one revision
+alembic downgrade -1
+```
+
+---
+
+## API Reference
+
+All endpoints are prefixed with `/api/v1`. Interactive docs available at `/docs`.
+
+### Authentication
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | `/auth/register` | — | Create a user account |
+| POST | `/auth/login` | — | OAuth2 password login → access + refresh token |
+| POST | `/auth/refresh` | — | Rotate refresh token for a new token pair |
+| POST | `/auth/logout` | — | Revoke a refresh token |
+| GET | `/users/me` | user | Current user profile |
+
+### Workspaces & Members
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | `/workspaces` | user | Create a workspace (creator becomes owner) |
+| GET | `/workspaces` | user | List user's workspaces |
+| POST | `/workspaces/join` | user | Join via invite code |
+| GET | `/workspaces/{id}` | member | Workspace detail |
+| PATCH | `/workspaces/{id}` | admin/owner | Update workspace |
+| DELETE | `/workspaces/{id}` | owner | Delete workspace |
+| POST | `/workspaces/{id}/invite-code/regenerate` | admin/owner | Rotate invite code |
+| GET | `/workspaces/{id}/members` | member | List members |
+| PATCH | `/workspaces/{id}/members/{user_id}` | admin/owner | Change member role |
+| DELETE | `/workspaces/{id}/members/{user_id}` | admin/owner | Remove a member |
+| DELETE | `/workspaces/{id}/members/me` | member | Leave workspace |
+
+### Monitors
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | `/workspaces/{id}/monitors` | member | Create a monitor (HTTP/TCP/PING) |
+| GET | `/workspaces/{id}/monitors` | member | List active monitors |
+| GET | `/workspaces/{id}/monitors/{monitor_id}` | member | Monitor detail |
+| PATCH | `/workspaces/{id}/monitors/{monitor_id}` | admin/owner/creator | Update a monitor |
+| DELETE | `/workspaces/{id}/monitors/{monitor_id}` | admin/owner/creator | Soft-delete a monitor |
+
+**Validation rules:**
+- HTTP monitors require an absolute `http(s)://` URL
+- TCP monitors require `host:port` format
+- PING monitors require a bare hostname or IP
+- Duplicate type + target within a workspace is rejected (409)
+
+### Health Checks & Incidents
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | `/workspaces/{id}/monitors/{monitor_id}/checks` | member | Record a health check result |
+| GET | `/workspaces/{id}/monitors/{monitor_id}/checks` | member | List check history |
+| GET | `/workspaces/{id}/incidents` | member | List workspace incidents |
+| GET | `/workspaces/{id}/incidents/{incident_id}` | member | Incident detail |
+| PATCH | `/workspaces/{id}/incidents/{incident_id}` | admin/owner | Acknowledge or resolve an incident |
+
+**Incident lifecycle:**
+- Each monitor has a configurable `failure_threshold` (default: 3)
+- Consecutive failures hitting the threshold → incident opened (severity: `major`, status: `open`)
+- A successful check resets the counter and auto-resolves any open incident
+- Admins/owners can manually acknowledge (`investigating`) or resolve incidents
+
+### Alert Rules & Notifications
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | `/workspaces/{id}/alert-rules` | admin/owner | Create an alert rule |
+| GET | `/workspaces/{id}/alert-rules` | admin/owner | List alert rules |
+| GET | `/workspaces/{id}/alert-rules/{rule_id}` | admin/owner | Alert rule detail |
+| PATCH | `/workspaces/{id}/alert-rules/{rule_id}` | admin/owner | Update an alert rule |
+| DELETE | `/workspaces/{id}/alert-rules/{rule_id}` | admin/owner | Delete an alert rule |
+| GET | `/workspaces/{id}/notifications` | member | List notifications |
+| GET | `/workspaces/{id}/notifications/{notification_id}` | member | Notification detail |
+
+**Channel types:** `webhook` (JSON POST) and `email` (plaintext via SMTP)  
+**Severity filter:** `min_severity` can be `minor`, `major`, or `critical`  
+**Retry logic:** Up to 5 delivery attempts per notification
+
+### Analytics & Metrics
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| GET | `/workspaces/{id}/monitors/{monitor_id}/metrics/latency` | member | Latency stats (avg/min/max/p50/p95/p99) |
+| GET | `/workspaces/{id}/monitors/{monitor_id}/metrics/uptime` | member | Uptime/SLA report (check-based + time-based) |
+| GET | `/workspaces/{id}/monitors/{monitor_id}/metrics/snapshots` | member | Daily metric snapshots |
+| GET | `/workspaces/{id}/dashboard` | member | Workspace-wide status overview |
+
+`latency` and `uptime` accept optional `start`/`end` ISO-8601 query params (default: trailing 24h, max range: 90 days).
+
+### Audit Logs
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| GET | `/workspaces/{id}/audit-logs` | admin/owner | List all audit log entries |
+| GET | `/workspaces/{id}/audit-logs/search` | admin/owner | Search/filter by user, action, entity, date range |
+| GET | `/workspaces/{id}/audit-logs/{audit_log_id}` | admin/owner | Single audit log entry |
+
+Each entry includes: `action`, `entity_type`, `entity_id`, `old_values`, `new_values` (JSON diffs), `ip_address`, `user_agent`, and `created_at`. Audit logs are immutable — `PATCH`/`DELETE` return 405.
+
+### System Health
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/health` | Basic liveness check (`{"status": "ok"}`) |
+| GET | `/health/ready` | Readiness check (verifies DB + Redis connectivity) |
+
+---
+
+## Frontend Pages
+
+| Route | Description |
+|---|---|
+| `/login` | User login form |
+| `/register` | User registration form |
+| `/workspaces` | List all workspaces, create new, join via invite code |
+| `/workspaces/[id]` | Workspace dashboard — monitor/incident status overview |
+| `/workspaces/[id]/monitors` | Monitor list with create/edit modal |
+| `/workspaces/[id]/monitors/[monitorId]` | Monitor detail — check history, latency/uptime metrics |
+| `/workspaces/[id]/incidents` | Incident list with status indicators |
+| `/workspaces/[id]/alerts` | Alert rule management (create/edit/delete) |
+| `/workspaces/[id]/notifications` | Notification delivery log |
+| `/workspaces/[id]/audit-logs` | Audit trail with search/filter |
+| `/workspaces/[id]/settings` | Workspace settings, member management, invite code |
+
+---
+
+## Scheduler & Background Workers
+
+Sentinel uses Celery for background tasks. Three scheduled jobs run on Celery beat:
+
+| Job | Interval | Description |
+|---|---|---|
+| `dispatch-due-checks` | `CHECK_DISPATCH_INTERVAL_SECONDS` (10s) | Find monitors due for a check and dispatch worker tasks |
+| `dispatch-pending-notifications` | `CHECK_DISPATCH_INTERVAL_SECONDS` (10s) | Retry pending/failed notification deliveries |
+| `aggregate-daily-metrics` | `METRICS_AGGREGATION_INTERVAL_SECONDS` (3600s) | Compute and upsert daily metric snapshots |
+
+### Running Workers
+
+```bash
+# Start the worker (executes tasks)
 celery -A app.core.celery_app worker --loglevel=info
+
+# Start the beat scheduler (dispatches tasks on schedule)
 celery -A app.core.celery_app beat --loglevel=info
 ```
 
-### Tests
+Both require Redis. For local dev without Redis, set `CELERY_TASK_ALWAYS_EAGER=true` in `.env` to run tasks synchronously in-process.
+
+### Local Polling Scheduler (No Redis Alternative)
+
+For environments without Redis, `run_local_scheduler.py` provides a simple polling loop that dispatches checks and notifications synchronously:
 
 ```bash
+python run_local_scheduler.py
+```
+
+---
+
+## Testing
+
+Tests run against a separate `TEST_DATABASE_URL` database.
+
+```bash
+# Create the test database
 createdb sentinel_test   # or via psql/pgAdmin
+
+# Run tests with coverage
 pytest -v
 ```
 
-## Frontend
+### Coverage
 
-The [`frontend/`](frontend/) directory contains a Next.js (App Router) +
-React 19 + TypeScript single-page app that consumes this API —
-authentication, workspaces (with member roles and invite codes), monitors
-(CRUD + detail with check history and metrics), a dashboard, incident
-management, alert rules, the notification delivery log, audit logs, and
-per-workspace API key management. It's a separate deployable, typically
-hosted on Vercel while the API above runs elsewhere. See
-[`docs/FRONTEND.md`](docs/FRONTEND.md) for the stack, local dev
-(`npm run dev`), environment variables, and deployment + CORS setup.
+Every `pytest` run reports line + branch coverage for `app/` and **fails if coverage drops below 95%**. The detailed HTML report is written to `htmlcov/index.html`.
 
-## API Documentation
+```bash
+# Generate HTML coverage report
+pytest --cov=app --cov-report=html
+```
 
-Once the app is running:
+The `concurrency = ["greenlet", "thread"]` setting in `pyproject.toml` ensures accurate coverage measurement across SQLAlchemy's async `greenlet_spawn` and Celery's threaded task execution.
 
-- **Swagger UI**: http://localhost:8000/docs
-- **OpenAPI schema**: http://localhost:8000/api/v1/openapi.json
-- **Health check**: http://localhost:8000/health
+---
 
-For a full endpoint reference grouped by resource (auth, workspaces,
-monitors, checks, incidents, alert rules, notifications, metrics, audit
-logs, API keys), see [`docs/API.md`](docs/API.md).
+## CI/CD
 
-## Portfolio Assets
+Every push and PR to `main` runs `.github/workflows/ci.yml` with five parallel jobs:
 
-- **Architecture diagram** — [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
-  (Mermaid, renders on GitHub)
-- **Database ER diagram** — [`docs/ER_DIAGRAM.md`](docs/ER_DIAGRAM.md)
-  (Mermaid, renders on GitHub)
-- **Swagger UI** — ![Swagger UI](docs/screenshots/swagger-ui.png)
-- **Sample API call** — ![API response](docs/screenshots/api-response.png)
-- **Local deployment** — ![Docker Compose](docs/screenshots/docker-compose.png)
-- **CI/CD pipeline** — ![CI pipeline](docs/screenshots/ci-pipeline.png)
+| Job | What It Checks |
+|---|---|
+| **Lint (ruff)** | `ruff check .` — code style & import ordering |
+| **Type check (mypy)** | `mypy app` — static type analysis |
+| **Test & coverage** | `pytest` against Postgres 16, gated at 95% coverage |
+| **Docker build validation** | `docker build` + `docker compose config` validation |
+| **Security checks** | `pip-audit` (dependency vulnerabilities) + `detect-secrets` (leaked secrets) |
 
-The four screenshots above are captured locally (not generated by this
-repo) — see [`docs/screenshots/README.md`](docs/screenshots/README.md) for
-the exact steps and filenames.
+### Updating the Secrets Baseline
+
+If `detect-secrets` flags a false positive:
+
+```bash
+detect-secrets scan > .secrets.baseline
+git add .secrets.baseline
+git commit -m "chore: update secrets baseline"
+```
+
+---
+
+## Deployment
+
+### Backend — Render
+
+The `render.yaml` Blueprint defines three services:
+
+| Service | Type | Description |
+|---|---|---|
+| `sentinel-api` | Web service | FastAPI application with auto-migrations |
+| `sentinel-worker` | Worker | Celery worker for health checks & notifications |
+| `sentinel-beat` | Worker | Celery beat scheduler |
+
+Plus managed Postgres (`sentinel-db`) and Redis (`sentinel-redis`).
+
+**Deploy to Render:**
+1. Push to GitHub
+2. Connect your repo on [Render Dashboard](https://dashboard.render.com)
+3. Render auto-detects `render.yaml` and provisions all services
+
+### Frontend — Vercel
+
+1. Import the `frontend/` directory on [Vercel](https://vercel.com)
+2. Set the environment variable `NEXT_PUBLIC_API_URL` to your Render API URL
+3. Vercel auto-deploys on every push to `main`
+
+> For detailed deployment instructions, see [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
+
+---
+
+## Git Workflow & Branch Naming
+
+Sentinel uses a **hybrid Git workflow** optimized for solo development:
+
+### Rules
+
+1. **`main` is always stable and deployable.** It is the single source of truth.
+2. **Commit directly to `main`** for small, low-risk changes (typo fixes, styling tweaks, config adjustments, small helpers).
+3. **Use a feature branch** for larger, multi-day features or major structural refactors. This ensures `main` always has a working version that can be deployed or demoed.
+
+### Branch Naming Convention
+
+All branches follow the format `<type>/<short-description>` with lowercase kebab-case:
+
+| Prefix | Use Case | Example |
+|---|---|---|
+| `feature/` | New features or capabilities | `feature/slack-integration` |
+| `fix/` | Bug fixes | `fix/token-refresh-loop` |
+| `chore/` | Maintenance, dependencies, config | `chore/upgrade-fastapi` |
+| `docs/` | Documentation only | `docs/api-reference-update` |
+| `refactor/` | Code restructuring (no behavior change) | `refactor/service-layer-cleanup` |
+| `test/` | Adding or updating tests only | `test/notification-edge-cases` |
+
+### Workflow
+
+```
+main ─────────────────────────────────────────────────►
+  │                                      │
+  ├── feature/slack-integration ─────────┤  (merge when ready)
+  │                                      │
+  ├── small commit directly to main ─────┤
+  │                                      │
+  └── fix/token-refresh-loop ────────────┘  (merge when ready)
+```
+
+### Commit Message Convention
+
+Use [Conventional Commits](https://www.conventionalcommits.org/) format:
+
+```
+<type>: <short description>
+
+# Examples:
+feat: add Slack notification channel
+fix: prevent duplicate incidents for same monitor
+chore: upgrade SQLAlchemy to 2.0.37
+docs: update API reference with new endpoints
+refactor: extract notification dispatcher to separate module
+test: add edge case tests for uptime calculation
+ci: add Node 22 to CI matrix
+```
+
+---
+
+## Documentation
+
+Extended documentation is available in the [`docs/`](docs/) directory:
+
+| Document | Description |
+|---|---|
+| [`API.md`](docs/API.md) | Full API endpoint reference |
+| [`ARCHITECTURE.md`](docs/ARCHITECTURE.md) | System architecture, patterns, and design decisions |
+| [`DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Render + Vercel deployment guide |
+| [`ER_DIAGRAM.md`](docs/ER_DIAGRAM.md) | Entity-relationship diagram for all database models |
+| [`FRONTEND.md`](docs/FRONTEND.md) | Frontend architecture, pages, and component structure |
+| [`TESTING_MANUAL.md`](TESTING_MANUAL.md) | Manual testing procedures and scenarios |
+
+---
+
+<p align="center">
+  Built by <a href="https://github.com/sarangs1621">sarangs1621</a>
+</p>
