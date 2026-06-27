@@ -72,13 +72,17 @@ async def deliver_email(to_address: str, incident: Incident, event: Notification
     message.set_content(_build_body(incident, event))
 
     try:
+        use_tls = settings.SMTP_USE_TLS and settings.SMTP_PORT == 465
+        start_tls = settings.SMTP_USE_TLS and settings.SMTP_PORT != 465
+
         await aiosmtplib.send(
             message,
             hostname=settings.SMTP_HOST,
             port=settings.SMTP_PORT,
             username=settings.SMTP_USERNAME,
             password=settings.SMTP_PASSWORD,
-            start_tls=settings.SMTP_USE_TLS,
+            use_tls=use_tls,
+            start_tls=start_tls,
             timeout=_DELIVERY_TIMEOUT_SECONDS,
         )
         return DeliveryResult(True, None, None)
