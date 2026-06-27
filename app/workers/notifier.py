@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 from email.message import EmailMessage
 
-import aiosmtplib
 import httpx
 
 from app.core.config import settings
@@ -65,26 +64,26 @@ def _build_body(incident: Incident, event: NotificationEvent) -> str:
 
 
 async def deliver_email(to_address: str, incident: Incident, event: NotificationEvent) -> DeliveryResult:
-    message = EmailMessage()
-    message["From"] = settings.SMTP_FROM_ADDRESS
-    message["To"] = to_address
-    message["Subject"] = _build_subject(incident, event)
-    message.set_content(_build_body(incident, event))
+    if not settings.RESEND_API_KEY:
+        return DeliveryResult(False, None, "RESEND_API_KEY is not configured")
+
+    payload = {
+        "from": settings.EMAIL_FROM_ADDRESS,
+        "to": [to_address],
+        "subject": _build_subject(incident, event),
+        "html": _build_body(incident, event).replace('\n', '<br>')
+    }
+
+    headers = {
+        "Authorization": f"Bearer {settings.RESEND_API_KEY}",
+        "Content-Type": "application/json"
+    }
 
     try:
-        use_tls = settings.SMTP_USE_TLS and settings.SMTP_PORT == 465
-        start_tls = settings.SMTP_USE_TLS and settings.SMTP_PORT != 465
-
-        await aiosmtplib.send(
-            message,
-            hostname=settings.SMTP_HOST,
-            port=settings.SMTP_PORT,
-            username=settings.SMTP_USERNAME,
-            password=settings.SMTP_PASSWORD,
-            use_tls=use_tls,
-            start_tls=start_tls,
-            timeout=_DELIVERY_TIMEOUT_SECONDS,
-        )
-        return DeliveryResult(True, None, None)
-    except (aiosmtplib.SMTPException, OSError) as exc:
+        async with httpx.AsyncClient(timeout=_DELIVERY_TIMEOUT_SECONDS) as http_client:
+            response = await http_client.post("https://api.resend.com/emails", json=payload, headers=headers)
+        if response.status_code < 400:
+            return DeliveryResult(True, response.status_code, None)
+        return DeliveryResult(False, response.status_code, f"Resend API error: {response.text}")
+    except httpx.HTTPError as exc:
         return DeliveryResult(False, None, str(exc))

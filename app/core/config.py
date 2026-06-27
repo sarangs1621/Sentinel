@@ -68,12 +68,8 @@ class Settings(BaseSettings):
 
     HSTS_MAX_AGE_SECONDS: int = 63072000
 
-    SMTP_HOST: str = "localhost"
-    SMTP_PORT: int = 587
-    SMTP_USERNAME: str | None = None
-    SMTP_PASSWORD: str | None = None
-    SMTP_USE_TLS: bool = True
-    SMTP_FROM_ADDRESS: str = "alerts@sentinel.local"
+    RESEND_API_KEY: str | None = None
+    EMAIL_FROM_ADDRESS: str = "onboarding@resend.dev"
 
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
     @classmethod
