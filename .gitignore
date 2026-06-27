@@ -25,10 +25,15 @@ htmlcov/
 .idea/
 .vscode/
 
+# Logs
+*.log
+
 # Frontend (Next.js)
 frontend/node_modules/
 frontend/.next/
 frontend/out/
+frontend/.env.local
+frontend/next-env.d.ts
 
 # Celery beat schedule (local dev)
 celerybeat-schedule*
@@ -36,3 +41,4 @@ celerybeat-schedule*
 # OS
 .DS_Store
 Thumbs.db
+
